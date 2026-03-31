@@ -50,7 +50,7 @@ function applyQuantityDiscount(price, qty) {
 }
 
 // ------------------------------
-// 4) API: CREATE ORDER (COMPLETE SECURE)
+// 4) API: CREATE ORDER
 // ------------------------------
 app.post("/create-order", async (req, res) => {
     try {
@@ -62,14 +62,16 @@ app.post("/create-order", async (req, res) => {
 
         const product = await getProductByURLandSize(productURL, selectedSize);
         if (!product) {
-            return res
-                .status(404)
-                .json({ error: "Product with selected size not found in Google Sheet" });
+            return res.status(404).json({
+                error: "Product with selected size not found in Google Sheet"
+            });
         }
 
         const basePrice = parseInt(product.Price);
         if (isNaN(basePrice)) {
-            return res.status(400).json({ error: "Invalid price format in Google Sheet" });
+            return res.status(400).json({
+                error: "Invalid price format in Google Sheet"
+            });
         }
 
         // FINAL PRICE BASED ON QTY
@@ -123,15 +125,10 @@ app.post("/verify-payment", (req, res) => {
 });
 
 // ------------------------------
-// DEFAULT ROUTES
+// DEFAULT ROOT ROUTE ONLY
 // ------------------------------
 app.get("/", (req, res) => {
     res.send("Backend is running");
-});
-
-// ✅ FIXED TEST ROUTE (only once, correct location)
-app.get("/test", (req, res) => {
-    res.send("Server Working Fine ✔️");
 });
 
 // ------------------------------
