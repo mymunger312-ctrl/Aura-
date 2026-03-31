@@ -123,17 +123,18 @@ app.post("/verify-payment", (req, res) => {
 });
 
 // ------------------------------
+// DEFAULT ROUTES
+// ------------------------------
 app.get("/", (req, res) => {
     res.send("Backend is running");
 });
 
-// ------------------------------
-const PORT = process.env.PORT || 5000;
+// ✅ FIXED TEST ROUTE (only once, correct location)
 app.get("/test", (req, res) => {
-  res.send("Server Working Fine ✔️");
+    res.send("Server Working Fine ✔️");
 });
 
+// ------------------------------
+const PORT = process.env.PORT || 5000;
+
 app.listen(PORT, () => console.log("Server running on port " + PORT));
-app.get("/test", async (req, res) => {
-    res.json({ message: "Running code version 2" });
-});
