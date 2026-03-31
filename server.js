@@ -1,120 +1,59 @@
-const express = require("express");
-const Razorpay = require("razorpay");
-const crypto = require("crypto");
-const cors = require("cors");
-const rateLimit = require("express-rate-limit");
-
-const API_TOKEN = "AW_SECURE_TOKEN_2026";
+import express from "express";
+import crypto from "crypto";
+import cors from "cors";
 
 const app = express();
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-const limiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 30
-});
-app.use(limiter);
+// Duplicate payment temporary memory store (Render free tier)
+global.paid = global.paid || {};
 
-const usedPayments = new Set();
-const recentOrders = new Map();
-
-const razorpay = new Razorpay({
-  key_id: process.env.KEY_ID,
-  key_secret: process.env.KEY_SECRET
-});
-
-/* ✅ CREATE ORDER */
-app.post("/create-order", async (req, res) => {
-  if (req.headers["x-token"] !== API_TOKEN)
-    return res.status(403).send("Blocked");
-
-  try {
-    const { productId, qty } = req.body;
-
-    const price = getPriceFromDB(productId);
-    const amount = price * qty;
-
-    const order = await razorpay.orders.create({
-      amount: amount * 100,
-      currency: "INR"
-    });
-
-    res.json(order);
-  } catch (err) {
-    res.status(500).send("Error");
-  }
-});
-
-/* ✅ VERIFY PAYMENT */
 app.post("/verify-payment", async (req, res) => {
-  if (req.headers["x-token"] !== API_TOKEN)
-    return res.status(403).send("Blocked");
-
   try {
     const {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature,
       orderId,
-      customer
+      amount,
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature
     } = req.body;
 
-    const sign = crypto
-      .createHmac("sha256", process.env.KEY_SECRET)
-      .update(razorpay_order_id + "|" + razorpay_payment_id)
+    // 1) Razorpay signature verification
+    const expectedSign = crypto
+      .createHmac("sha256", process.env.RAZORPAY_SECRET)
+      .update(orderId + "|" + razorpay_payment_id)
       .digest("hex");
 
-    if (sign !== razorpay_signature) {
-      return res.send("Fake payment");
+    if (expectedSign !== razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        reason: "INVALID_SIGNATURE"
+      });
     }
 
-    if (usedPayments.has(razorpay_payment_id)) {
-      return res.send("Duplicate payment");
+    // 2) Duplicate payment protection
+    if (global.paid[razorpay_payment_id]) {
+      return res.status(409).json({
+        success: false,
+        reason: "DUPLICATE_PAYMENT"
+      });
     }
+    global.paid[razorpay_payment_id] = true;
 
-    usedPayments.add(razorpay_payment_id);
+    // 3) Log server record
+    console.log("PAYMENT VERIFIED:", req.body);
 
-    const order = await razorpay.orders.fetch(razorpay_order_id);
-
-    if (!order) return res.send("Invalid order");
-
-    saveOrderToSheet(customer, razorpay_payment_id);
-
-    res.send("OK");
-
+    return res.json({ success: true });
   } catch (err) {
-    res.status(500).send("Error");
+    return res.status(500).json({
+      success: false,
+      reason: "SERVER_ERROR",
+      error: err.toString()
+    });
   }
 });
 
-/* ✅ COD */
-app.post("/place-cod", (req, res) => {
-  if (req.headers["x-token"] !== API_TOKEN)
-    return res.status(403).send("Blocked");
-
-  const { customer } = req.body;
-
-  const last = recentOrders.get(customer.phone);
-  if (last && Date.now() - last < 5 * 60 * 1000) {
-    return res.send("Too many orders");
-  }
-
-  recentOrders.set(customer.phone, Date.now());
-
-  saveOrderToSheet(customer, "COD");
-
-  res.send("OK");
+app.listen(10000, () => {
+  console.log("Auraa secure backend running on port 10000");
 });
-
-app.listen(process.env.PORT || 3000, () =>
-  console.log("Server running")
-);
-
-function getPriceFromDB(productId){
-  return 499;
-}
-
-function saveOrderToSheet(customer, paymentId){
-  console.log("SAVE:", customer, paymentId);
-                                }
