@@ -28,11 +28,14 @@ async function getProductByURLandSize(productURL, selectedSize) {
 
     const sheetData = await (await fetch(sheetURL)).json();
 
-    const product = sheetData.find(
-        (p) =>
-            (p.Link || "").trim() === productURL.trim() &&
-            (p.Size || "").trim().toLowerCase() === selectedSize.trim().toLowerCase()
-    );
+    const product = sheetData.find((p) =>
+    (p.Link || "").trim() === productURL.trim() &&
+    (p.Size || "")
+        .toLowerCase()
+        .split(",")
+        .map(s => s.trim())
+        .includes(selectedSize.toLowerCase())
+);
 
     return product || null;
 }
@@ -67,7 +70,7 @@ app.post("/create-order", async (req, res) => {
             });
         }
 
-        const basePrice = parseInt(product.Price);
+        const basePrice = parseInt((product.Price || "").replace(/[^\d]/g, ""));
         if (isNaN(basePrice)) {
             return res.status(400).json({
                 error: "Invalid price format in Google Sheet"
