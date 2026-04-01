@@ -29,12 +29,12 @@ async function getProductByURLandSize(productURL, selectedSize) {
     const sheetData = await (await fetch(sheetURL)).json();
 
     const product = sheetData.find((p) =>
-    (p.Link || "").trim().split("?")[0] === productURL.trim().split("?")[0]
-    (p.Size || "")
-        .toLowerCase()
-        .split(",")
-        .map(s => s.trim())
-        .includes(selectedSize.toLowerCase())
+  (p.Link || "").trim().split("?")[0] === productURL.trim().split("?")[0] &&
+  (p.Size || "")
+    .toLowerCase()
+    .split(",")
+    .map(s => s.trim())
+    .includes(selectedSize.toLowerCase())
 );
 
     return product || null;
