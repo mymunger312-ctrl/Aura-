@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import Razorpay from "razorpay";
 import crypto from "crypto";
@@ -11,164 +10,117 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ------------------------------
-// 1) RAZORPAY INITIALIZATION
-// ------------------------------
+const SECRET = process.env.SECRET_KEY;
+
+// RAZORPAY
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
+key_id: process.env.RAZORPAY_KEY_ID,
+key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-// ------------------------------
-// 2) FETCH PRODUCT FROM GOOGLE SHEET USING URL
-// ------------------------------
-async function getProduct(productURL) {
-    const sheetURL =
-        "https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1";
+// FETCH PRODUCT
+async function getProduct(url){
+const sheet = await (await fetch("https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1")).json();
 
-    const sheetData = await (await fetch(sheetURL)).json();
-
-    return sheetData.find(p =>
-        (p.Link || "").trim().split("?")[0] === productURL.trim().split("?")[0]
-    ) || null;
+return sheet.find(p =>
+(p.Link || "").trim().split("?")[0] === url.trim().split("?")[0]
+);
 }
 
-// ------------------------------
-// 3) GET PRICE BASED ON SIZE
-// ------------------------------
-function getPriceBySize(product, selectedSize) {
+// GET PRICE
+function getPrice(product,size){
+let sizes = product.Size.toLowerCase().split(",");
+let prices = product.Price.split(",");
 
-    const sizes = (product.Size || "")
-        .toLowerCase()
-        .split(",")
-        .map(s => s.trim());
-
-    const prices = (product.Price || "")
-        .split(",")
-        .map(p => parseInt(p.trim()));
-
-    const index = sizes.indexOf(selectedSize.toLowerCase());
-
-    if (index === -1 || !prices[index] || isNaN(prices[index])) {
-        return null;
-    }
-
-    return prices[index];
+let i = sizes.indexOf(size);
+return i>=0 ? parseInt(prices[i]) : null;
 }
 
-// ------------------------------
-// 4) APPLY DISCOUNT
-// ------------------------------
-function applyQuantityDiscount(price, qty) {
-    const total = price * qty;
-
-    if (qty === 2) return Math.round(total * 0.95);
-    if (qty === 3) return Math.round(total * 0.93);
-
-    return total; // ✅ FIXED
+// DISCOUNT
+function calc(price,qty){
+let t = price*qty;
+if(qty==2) t*=0.95;
+if(qty==3) t*=0.93;
+return Math.round(t);
 }
 
-// ------------------------------
-// 5) CREATE ORDER
-// ------------------------------
-app.post("/create-order", async (req, res) => {
-    try {
-        const { productURL, selectedSize, quantity } = req.body;
+// CREATE ORDER
+app.post("/create-order", async(req,res)=>{
+let {productURL,selectedSize,quantity}=req.body;
 
-        // ---------------- VALIDATION ----------------
-        if (!productURL || !selectedSize || !quantity) {
-            return res.status(400).json({ error: "Missing required fields" });
-        }
+let product = await getProduct(productURL);
+if(!product) return res.json({error:"Product not found"});
 
-        // ---------------- FETCH PRODUCT ----------------
-        const product = await getProduct(productURL);
+let price = getPrice(product,selectedSize);
+if(!price) return res.json({error:"Invalid size"});
 
-        if (!product) {
-            return res.status(404).json({
-                error: "Product not found in Google Sheet"
-            });
-        }
+let final = calc(price,quantity);
 
-        // ---------------- GET PRICE ----------------
-        const basePrice = getPriceBySize(product, selectedSize);
-
-        if (!basePrice) {
-            return res.status(400).json({
-                error: "Invalid size or price not found"
-            });
-        }
-
-        // ---------------- FINAL AMOUNT ----------------
-        const finalAmount = applyQuantityDiscount(basePrice, quantity);
-
-        if (!finalAmount || finalAmount <= 0) {
-            return res.status(400).json({
-                error: "Invalid amount"
-            });
-        }
-
-        const amountInPaise = finalAmount * 100;
-
-        // ---------------- RAZORPAY ORDER ----------------
-        const order = await razorpay.orders.create({
-            amount: amountInPaise,
-            currency: "INR",
-            receipt: "order_" + Date.now(),
-        });
-
-        return res.json({
-            success: true,
-            orderId: order.id,
-            amount: finalAmount,
-            amountInPaise,
-            basePrice,
-            quantity,
-            selectedSize,
-            productURL
-        });
-
-    } catch (error) {
-        console.error("CREATE ORDER ERROR:", error);
-        return res.status(500).json({
-            error: error.message || "Server error creating order"
-        });
-    }
+let order = await razorpay.orders.create({
+amount: final*100,
+currency:"INR"
 });
 
-// ------------------------------
-// 6) VERIFY PAYMENT
-// ------------------------------
-app.post("/verify-payment", (req, res) => {
-    try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-        const body = razorpay_order_id + "|" + razorpay_payment_id;
-
-        const expectedSignature = crypto
-            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-            .update(body)
-            .digest("hex");
-
-        if (expectedSignature === razorpay_signature) {
-            return res.json({ success: true });
-        }
-
-        return res.status(400).json({ success: false });
-
-    } catch (err) {
-        console.error("VERIFY ERROR:", err);
-        return res.status(500).json({ success: false });
-    }
+res.json({
+success:true,
+orderId:order.id,
+amountInPaise:final*100
+});
 });
 
-// ------------------------------
-// ROOT
-// ------------------------------
-app.get("/", (req, res) => {
-    res.send("Backend is running");
+// VERIFY PAYMENT + VALIDATE PRICE AGAIN
+app.post("/verify-payment", async(req,res)=>{
+
+let {razorpay_order_id,razorpay_payment_id,razorpay_signature,productURL,selectedSize,quantity} = req.body;
+
+let body = razorpay_order_id+"|"+razorpay_payment_id;
+
+let expected = crypto.createHmac("sha256",process.env.RAZORPAY_KEY_SECRET)
+.update(body).digest("hex");
+
+if(expected !== razorpay_signature){
+return res.json({success:false});
+}
+
+// RECHECK PRICE
+let product = await getProduct(productURL);
+let price = getPrice(product,selectedSize);
+let final = calc(price,quantity);
+
+let order = await razorpay.orders.fetch(razorpay_order_id);
+
+if(order.amount !== final*100){
+return res.json({success:false});
+}
+
+res.json({success:true});
 });
 
-// ------------------------------
-const PORT = process.env.PORT || 5000;
+// COD VALIDATION
+app.post("/create-cod", async(req,res)=>{
+let {productURL,selectedSize,quantity}=req.body;
 
-app.listen(PORT, () => console.log("Server running on port " + PORT));
+let product = await getProduct(productURL);
+let price = getPrice(product,selectedSize);
+let final = calc(price,quantity) + 100;
+
+res.json({success:true,amount:final});
+});
+
+// SAVE ORDER (SECURE)
+app.post("/save-order", async(req,res)=>{
+
+if(req.body.secret !== SECRET){
+return res.status(403).send("Unauthorized");
+}
+
+await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
+method:"POST",
+headers:{ "Content-Type":"application/json" },
+body:JSON.stringify(req.body)
+});
+
+res.json({success:true});
+});
+
+app.listen(process.env.PORT||5000);
