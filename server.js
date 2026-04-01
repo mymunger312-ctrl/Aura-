@@ -20,77 +20,103 @@ const razorpay = new Razorpay({
 });
 
 // ------------------------------
-// 2) FETCH PRODUCT FROM GOOGLE SHEET USING URL + SIZE
+// 2) FETCH PRODUCT FROM GOOGLE SHEET USING URL
 // ------------------------------
-async function getProductByURLandSize(productURL, selectedSize) {
+async function getProduct(productURL) {
     const sheetURL =
         "https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1";
 
     const sheetData = await (await fetch(sheetURL)).json();
 
-    const product = sheetData.find((p) =>
-  (p.Link || "").trim().split("?")[0] === productURL.trim().split("?")[0] &&
-  (p.Size || "")
-    .toLowerCase()
-    .split(",")
-    .map(s => s.trim())
-    .includes(selectedSize.toLowerCase())
-);
-
-    return product || null;
+    return sheetData.find(p =>
+        (p.Link || "").trim().split("?")[0] === productURL.trim().split("?")[0]
+    ) || null;
 }
 
 // ------------------------------
-// 3) CALCULATE PRICE BASED ON QUANTITY
+// 3) GET PRICE BASED ON SIZE
+// ------------------------------
+function getPriceBySize(product, selectedSize) {
+
+    const sizes = (product.Size || "")
+        .toLowerCase()
+        .split(",")
+        .map(s => s.trim());
+
+    const prices = (product.Price || "")
+        .split(",")
+        .map(p => parseInt(p.trim()));
+
+    const index = sizes.indexOf(selectedSize.toLowerCase());
+
+    if (index === -1 || !prices[index] || isNaN(prices[index])) {
+        return null;
+    }
+
+    return prices[index];
+}
+
+// ------------------------------
+// 4) APPLY DISCOUNT
 // ------------------------------
 function applyQuantityDiscount(price, qty) {
     const total = price * qty;
 
-    if (qty === 2) return Math.round(total - total * 0.05);
-    if (qty === 3) return Math.round(total - total * 0.07);
+    if (qty === 2) return Math.round(total * 0.95);
+    if (qty === 3) return Math.round(total * 0.93);
 
-    return price; // qty = 1
+    return total; // ✅ FIXED
 }
 
 // ------------------------------
-// 4) API: CREATE ORDER
+// 5) CREATE ORDER
 // ------------------------------
 app.post("/create-order", async (req, res) => {
     try {
         const { productURL, selectedSize, quantity } = req.body;
 
+        // ---------------- VALIDATION ----------------
         if (!productURL || !selectedSize || !quantity) {
             return res.status(400).json({ error: "Missing required fields" });
         }
 
-        const product = await getProductByURLandSize(productURL, selectedSize);
+        // ---------------- FETCH PRODUCT ----------------
+        const product = await getProduct(productURL);
+
         if (!product) {
             return res.status(404).json({
-                error: "Product with selected size not found in Google Sheet"
+                error: "Product not found in Google Sheet"
             });
         }
 
-        const basePrice = parseInt((product.Price || "").replace(/[^\d]/g, ""));
-        if (isNaN(basePrice)) {
+        // ---------------- GET PRICE ----------------
+        const basePrice = getPriceBySize(product, selectedSize);
+
+        if (!basePrice) {
             return res.status(400).json({
-                error: "Invalid price format in Google Sheet"
+                error: "Invalid size or price not found"
             });
         }
 
-        // FINAL PRICE BASED ON QTY
+        // ---------------- FINAL AMOUNT ----------------
         const finalAmount = applyQuantityDiscount(basePrice, quantity);
 
-        // Convert to paise
+        if (!finalAmount || finalAmount <= 0) {
+            return res.status(400).json({
+                error: "Invalid amount"
+            });
+        }
+
         const amountInPaise = finalAmount * 100;
 
-        // Razorpay order
+        // ---------------- RAZORPAY ORDER ----------------
         const order = await razorpay.orders.create({
             amount: amountInPaise,
             currency: "INR",
             receipt: "order_" + Date.now(),
         });
 
-        res.json({
+        return res.json({
             success: true,
             orderId: order.id,
             amount: finalAmount,
@@ -98,37 +124,45 @@ app.post("/create-order", async (req, res) => {
             basePrice,
             quantity,
             selectedSize,
-            productURL,
+            productURL
         });
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: "Server error creating order" });
+        console.error("CREATE ORDER ERROR:", error);
+        return res.status(500).json({
+            error: error.message || "Server error creating order"
+        });
     }
 });
 
 // ------------------------------
-// 5) VERIFY PAYMENT
+// 6) VERIFY PAYMENT
 // ------------------------------
 app.post("/verify-payment", (req, res) => {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
 
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
+        const body = razorpay_order_id + "|" + razorpay_payment_id;
 
-    const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-        .update(body)
-        .digest("hex");
+        const expectedSignature = crypto
+            .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+            .update(body)
+            .digest("hex");
 
-    if (expectedSignature === razorpay_signature) {
-        return res.json({ success: true });
+        if (expectedSignature === razorpay_signature) {
+            return res.json({ success: true });
+        }
+
+        return res.status(400).json({ success: false });
+
+    } catch (err) {
+        console.error("VERIFY ERROR:", err);
+        return res.status(500).json({ success: false });
     }
-
-    return res.status(400).json({ success: false });
 });
 
 // ------------------------------
-// DEFAULT ROOT ROUTE ONLY
+// ROOT
 // ------------------------------
 app.get("/", (req, res) => {
     res.send("Backend is running");
