@@ -42,6 +42,11 @@ function calc(price,qty){
   return Math.round(t);
 }
 
+// 🔥 NEW: PER PIECE DISCOUNT CALCULATOR
+function perPiece(final, qty){
+  return Math.round(final / qty);
+}
+
 // ---------------- CREATE ORDER (ONLINE) ----------------
 app.post("/create-order", async(req,res)=>{
   let {productURL,selectedSize,quantity}=req.body;
@@ -106,6 +111,9 @@ app.post("/verify-payment", async(req,res)=>{
     return res.json({success:false});
   }
 
+  // 🔥 CALCULATE DISCOUNTED PER PIECE
+  let discountedPerPiece = perPiece(final, quantity);
+
   // SAVE ORDER
   await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
     method:"POST",
@@ -125,9 +133,10 @@ app.post("/verify-payment", async(req,res)=>{
       "Size":selectedSize,
       "Quantity":quantity,
 
-      "Price":price,
+      // 🔥 FIXED VALUES
+      "Price":discountedPerPiece,
       "Base Price":price,
-      "Per Piece Price":price,
+      "Per Piece Price":discountedPerPiece,
       "Total Price":final,
 
       "Payment Status":"Paid",
@@ -158,16 +167,18 @@ app.post("/create-cod-order", async(req,res)=>{
       image
     } = req.body;
 
-    // 🔒 FETCH REAL DATA (NO TRUST FRONTEND)
     let product = await getProduct(productURL);
     if(!product) return res.json({success:false});
 
     let price = getPrice(product,selectedSize);
     if(!price) return res.json({success:false});
 
-    let final = calc(price,quantity) + 100;
+    let finalWithoutCOD = calc(price,quantity);
+    let final = finalWithoutCOD + 100;
 
-    // 🔥 SAVE TO GOOGLE SHEET
+    // 🔥 PER PIECE DISCOUNT
+    let discountedPerPiece = perPiece(finalWithoutCOD, quantity);
+
     await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
       method:"POST",
       headers:{ "Content-Type":"application/json" },
@@ -186,9 +197,10 @@ app.post("/create-cod-order", async(req,res)=>{
         "Size":selectedSize,
         "Quantity":quantity,
 
-        "Price":price,
+        // 🔥 FIXED VALUES
+        "Price":discountedPerPiece,
         "Base Price":price,
-        "Per Piece Price":price,
+        "Per Piece Price":discountedPerPiece,
         "Total Price":final,
 
         "Payment Status":"COD",
