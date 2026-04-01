@@ -10,33 +10,25 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const SECRET = process.env.SECRET_KEY;
-
-// RAZORPAY
 const razorpay = new Razorpay({
 key_id: process.env.RAZORPAY_KEY_ID,
 key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
-// FETCH PRODUCT
 async function getProduct(url){
 const sheet = await (await fetch("https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1")).json();
-
 return sheet.find(p =>
 (p.Link || "").trim().split("?")[0] === url.trim().split("?")[0]
 );
 }
 
-// GET PRICE
 function getPrice(product,size){
 let sizes = product.Size.toLowerCase().split(",");
 let prices = product.Price.split(",");
-
 let i = sizes.indexOf(size);
 return i>=0 ? parseInt(prices[i]) : null;
 }
 
-// DISCOUNT
 function calc(price,qty){
 let t = price*qty;
 if(qty==2) t*=0.95;
@@ -44,16 +36,11 @@ if(qty==3) t*=0.93;
 return Math.round(t);
 }
 
-// CREATE ORDER
 app.post("/create-order", async(req,res)=>{
 let {productURL,selectedSize,quantity}=req.body;
 
 let product = await getProduct(productURL);
-if(!product) return res.json({error:"Product not found"});
-
 let price = getPrice(product,selectedSize);
-if(!price) return res.json({error:"Invalid size"});
-
 let final = calc(price,quantity);
 
 let order = await razorpay.orders.create({
@@ -68,7 +55,6 @@ amountInPaise:final*100
 });
 });
 
-// VERIFY PAYMENT + VALIDATE PRICE AGAIN
 app.post("/verify-payment", async(req,res)=>{
 
 let {razorpay_order_id,razorpay_payment_id,razorpay_signature,productURL,selectedSize,quantity} = req.body;
@@ -96,7 +82,6 @@ return res.json({success:false});
 res.json({success:true});
 });
 
-// COD VALIDATION
 app.post("/create-cod", async(req,res)=>{
 let {productURL,selectedSize,quantity}=req.body;
 
@@ -107,17 +92,20 @@ let final = calc(price,quantity) + 100;
 res.json({success:true,amount:final});
 });
 
-// SAVE ORDER (SECURE)
+// 🔐 ONLY BACKEND CAN SAVE ORDER
 app.post("/save-order", async(req,res)=>{
 
-if(req.body.secret !== SECRET){
-return res.status(403).send("Unauthorized");
+let data = req.body;
+
+// BASIC VALIDATION
+if(!data.productURL || !data.qty){
+return res.status(400).send("Invalid");
 }
 
 await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
 method:"POST",
 headers:{ "Content-Type":"application/json" },
-body:JSON.stringify(req.body)
+body:JSON.stringify(data)
 });
 
 res.json({success:true});
