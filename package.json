@@ -1,14 +1,12 @@
 {
-  "name": "razorpay-backend",
-  "version": "1.0.0",
-  "main": "server.js",
+  "name": "secure-backend",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "crypto": "^1.0.1",
     "dotenv": "^16.3.1",
     "express": "^4.19.2",
     "node-fetch": "^3.3.2",
