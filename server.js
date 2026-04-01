@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import Razorpay from "razorpay";
 import crypto from "crypto";
@@ -11,130 +10,101 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ------------------------------
-// 1) RAZORPAY INITIALIZATION
-// ------------------------------
+// -------------------------------
+// Razorpay Initialization
+// -------------------------------
 const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET
+    key_id: process.env.RAZORPAY_KEY,
+    key_secret: process.env.RAZORPAY_SECRET
 });
 
-// ------------------------------
-// 2) FETCH PRODUCT FROM GOOGLE SHEET USING URL + SIZE
-// ------------------------------
-async function getProductByURLandSize(productURL, selectedSize) {
-    const sheetURL =
-        "https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1";
-
-    const sheetData = await (await fetch(sheetURL)).json();
-
-    const product = sheetData.find((p) =>
-    (p.Link || "").trim() === productURL.trim() &&
-    (p.Size || "")
-        .toLowerCase()
-        .split(",")
-        .map(s => s.trim())
-        .includes(selectedSize.toLowerCase())
-);
-
-    return product || null;
-}
-
-// ------------------------------
-// 3) CALCULATE PRICE BASED ON QUANTITY
-// ------------------------------
-function applyQuantityDiscount(price, qty) {
-    const total = price * qty;
-
-    if (qty === 2) return Math.round(total - total * 0.05);
-    if (qty === 3) return Math.round(total - total * 0.07);
-
-    return price; // qty = 1
-}
-
-// ------------------------------
-// 4) API: CREATE ORDER
-// ------------------------------
+// -------------------------------
+// Create Order API
+// -------------------------------
 app.post("/create-order", async (req, res) => {
     try {
         const { productURL, selectedSize, quantity } = req.body;
 
         if (!productURL || !selectedSize || !quantity) {
-            return res.status(400).json({ error: "Missing required fields" });
+            return res.json({ success: false, error: "Missing parameters" });
         }
 
-        const product = await getProductByURLandSize(productURL, selectedSize);
-        if (!product) {
-            return res.status(404).json({
-                error: "Product with selected size not found in Google Sheet"
+        // Fetch Google Sheet Data
+        const sheetURL =
+            "https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1";
+
+        const response = await fetch(sheetURL);
+        const sheetData = await response.json();
+
+        // -----------------------------
+        // FIXED MATCHING LOGIC
+        // -----------------------------
+        const match = sheetData.find(item =>
+            (item.Link || "").trim() === productURL.trim() &&
+            (item.Size || "").toLowerCase().includes(selectedSize.toLowerCase()) // FIXED
+        );
+
+        if (!match) {
+            return res.json({
+                success: false,
+                error: "product with selected size not found in Google sheet"
             });
         }
 
-        const basePrice = parseInt((product.Price || "").replace(/[^\d]/g, ""));
-        if (isNaN(basePrice)) {
-            return res.status(400).json({
-                error: "Invalid price format in Google Sheet"
-            });
+        const price = parseInt(match.Price);
+        if (!price) {
+            return res.json({ success: false, error: "Invalid price in sheet" });
         }
 
-        // FINAL PRICE BASED ON QTY
-        const finalAmount = applyQuantityDiscount(basePrice, quantity);
-
-        // Convert to paise
+        const finalAmount = price * Number(quantity);
         const amountInPaise = finalAmount * 100;
 
-        // Razorpay order
-        const order = await razorpay.orders.create({
+        // Razorpay Create Order
+        const razorpayOrder = await razorpay.orders.create({
             amount: amountInPaise,
             currency: "INR",
-            receipt: "order_" + Date.now(),
+            receipt: "AW" + Date.now()
         });
 
         res.json({
             success: true,
-            orderId: order.id,
-            amount: finalAmount,
-            amountInPaise,
-            basePrice,
-            quantity,
-            selectedSize,
-            productURL,
+            orderId: razorpayOrder.id,
+            amountInPaise
         });
 
+    } catch (err) {
+        console.error(err);
+        res.json({ success: false, error: "Server error" });
+    }
+});
+
+// -------------------------------
+// Payment Verification
+// -------------------------------
+app.post("/verify-payment", async (req, res) => {
+    try {
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
+            req.body;
+
+        const generatedSignature = crypto
+            .createHmac("sha256", process.env.RAZORPAY_SECRET)
+            .update(razorpay_order_id + "|" + razorpay_payment_id)
+            .digest("hex");
+
+        if (generatedSignature === razorpay_signature) {
+            return res.json({ success: true });
+        } else {
+            return res.json({ success: false });
+        }
     } catch (error) {
         console.error(error);
-        res.status(500).json({ error: "Server error creating order" });
+        res.json({ success: false });
     }
 });
 
-// ------------------------------
-// 5) VERIFY PAYMENT
-// ------------------------------
-app.post("/verify-payment", (req, res) => {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-
-    const body = razorpay_order_id + "|" + razorpay_payment_id;
-
-    const expectedSignature = crypto
-        .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-        .update(body)
-        .digest("hex");
-
-    if (expectedSignature === razorpay_signature) {
-        return res.json({ success: true });
-    }
-
-    return res.status(400).json({ success: false });
+// -------------------------------
+// Start Server
+// -------------------------------
+app.listen(3000, () => {
+    console.log("Server running on port 3000");
 });
-
-// ------------------------------
-// DEFAULT ROOT ROUTE ONLY
-// ------------------------------
-app.get("/", (req, res) => {
-    res.send("Backend is running");
-});
-
-// ------------------------------
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => console.log("Server running on port " + PORT));
