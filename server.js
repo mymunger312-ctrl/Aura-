@@ -15,13 +15,16 @@ key_id: process.env.RAZORPAY_KEY_ID,
 key_secret: process.env.RAZORPAY_KEY_SECRET
 });
 
+const SHEET_URL = "https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec";
+const PRODUCT_SHEET = "https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1";
+
+// GET PRODUCT
 async function getProduct(url){
-const sheet = await (await fetch("https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1")).json();
-return sheet.find(p =>
-(p.Link || "").trim().split("?")[0] === url.trim().split("?")[0]
-);
+const data = await (await fetch(PRODUCT_SHEET)).json();
+return data.find(p => (p.Link||"").trim().split("?")[0] === url.trim().split("?")[0]);
 }
 
+// GET PRICE
 function getPrice(product,size){
 let sizes = product.Size.toLowerCase().split(",");
 let prices = product.Price.split(",");
@@ -29,6 +32,7 @@ let i = sizes.indexOf(size);
 return i>=0 ? parseInt(prices[i]) : null;
 }
 
+// CALC
 function calc(price,qty){
 let t = price*qty;
 if(qty==2) t*=0.95;
@@ -36,10 +40,13 @@ if(qty==3) t*=0.93;
 return Math.round(t);
 }
 
+// CREATE ORDER
 app.post("/create-order", async(req,res)=>{
-let {productURL,selectedSize,quantity}=req.body;
+let {productURL,selectedSize,quantity} = req.body;
 
 let product = await getProduct(productURL);
+if(!product) return res.json({error:"Product not found"});
+
 let price = getPrice(product,selectedSize);
 let final = calc(price,quantity);
 
@@ -48,16 +55,13 @@ amount: final*100,
 currency:"INR"
 });
 
-res.json({
-success:true,
-orderId:order.id,
-amountInPaise:final*100
-});
+res.json({success:true,orderId:order.id,amountInPaise:final*100});
 });
 
+// VERIFY + SAVE
 app.post("/verify-payment", async(req,res)=>{
 
-let {razorpay_order_id,razorpay_payment_id,razorpay_signature,productURL,selectedSize,quantity} = req.body;
+let {razorpay_order_id,razorpay_payment_id,razorpay_signature,productURL,selectedSize,quantity,...user} = req.body;
 
 let body = razorpay_order_id+"|"+razorpay_payment_id;
 
@@ -68,7 +72,7 @@ if(expected !== razorpay_signature){
 return res.json({success:false});
 }
 
-// RECHECK PRICE
+// VERIFY PRICE AGAIN
 let product = await getProduct(productURL);
 let price = getPrice(product,selectedSize);
 let final = calc(price,quantity);
@@ -79,33 +83,64 @@ if(order.amount !== final*100){
 return res.json({success:false});
 }
 
+// SAVE ORDER
+await fetch(SHEET_URL,{
+method:"POST",
+headers:{ "Content-Type":"application/json" },
+body:JSON.stringify({
+"Order ID":"AW"+Date.now(),
+"Name":user.name,
+"Email ID":user.email,
+"Phone":user.phone,
+"Pin Code":user.pin,
+"Landmark":user.landmark,
+"House No /Apartment No /Street No":user.house,
+"Address":user.address,
+"Product Title":user.product,
+"Product Image":user.image,
+"Product URL":productURL,
+"Size":selectedSize,
+"Quantity":quantity,
+"Payment Status":"Paid",
+"Payment Method":"Online",
+"Total Price":final
+})
+});
+
 res.json({success:true});
 });
 
-app.post("/create-cod", async(req,res)=>{
-let {productURL,selectedSize,quantity}=req.body;
+// COD
+app.post("/cod-order", async(req,res)=>{
+
+let {productURL,selectedSize,quantity,...user} = req.body;
 
 let product = await getProduct(productURL);
 let price = getPrice(product,selectedSize);
-let final = calc(price,quantity) + 100;
+let final = calc(price,quantity)+100;
 
-res.json({success:true,amount:final});
-});
-
-// 🔐 ONLY BACKEND CAN SAVE ORDER
-app.post("/save-order", async(req,res)=>{
-
-let data = req.body;
-
-// BASIC VALIDATION
-if(!data.productURL || !data.qty){
-return res.status(400).send("Invalid");
-}
-
-await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
+// SAVE
+await fetch(SHEET_URL,{
 method:"POST",
 headers:{ "Content-Type":"application/json" },
-body:JSON.stringify(data)
+body:JSON.stringify({
+"Order ID":"AW"+Date.now(),
+"Name":user.name,
+"Email ID":user.email,
+"Phone":user.phone,
+"Pin Code":user.pin,
+"Landmark":user.landmark,
+"House No /Apartment No /Street No":user.house,
+"Address":user.address,
+"Product Title":user.product,
+"Product Image":user.image,
+"Product URL":productURL,
+"Size":selectedSize,
+"Quantity":quantity,
+"Payment Status":"COD",
+"Payment Method":"COD",
+"Total Price":final
+})
 });
 
 res.json({success:true});
