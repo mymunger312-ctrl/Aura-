@@ -7,7 +7,26 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-app.use(cors());
+const allowedOrigins = [
+  "https://aurawardrobe.blogspot.com",
+  "https://aurawardrobe.in",
+  "https://www.aurawardrobe.in"
+];
+
+app.use(cors({
+  origin: function(origin, callback){
+    if(!origin) return callback(null, true);
+    if(allowedOrigins.includes(origin)){
+      return callback(null, true);
+    }
+    return callback(new Error("CORS blocked: " + origin));
+  },
+  credentials: true,
+  methods: ["GET","POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+app.set("trust proxy", 1);
 app.use(express.json());
 
 // RAZORPAY
