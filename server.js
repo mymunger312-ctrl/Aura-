@@ -7,26 +7,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const allowedOrigins = [
-  "https://aurawardrobe.blogspot.com",
-  "https://aurawardrobe.in",
-  "https://www.aurawardrobe.in"
-];
-
-app.use(cors({
-  origin: function(origin, callback){
-    if(!origin) return callback(null, true);
-    if(allowedOrigins.includes(origin)){
-      return callback(null, true);
-    }
-    return callback(new Error("CORS blocked: " + origin));
-  },
-  credentials: true,
-  methods: ["GET","POST"],
-  allowedHeaders: ["Content-Type"]
-}));
-
-app.set("trust proxy", 1);
+app.use(cors());
 app.use(express.json());
 
 // RAZORPAY
@@ -121,43 +102,51 @@ app.post("/verify-payment", async(req,res)=>{
   }
 
   let product = await getProduct(productURL);
-let price = getPrice(product,selectedSize);
+  let price = getPrice(product,selectedSize);
+  let final = calc(price,quantity);
 
-let order = await razorpay.orders.fetch(razorpay_order_id);
-let final = order.amount / 100;
+  let order = await razorpay.orders.fetch(razorpay_order_id);
+
+  if(order.amount !== final*100){
+    return res.json({success:false});
+  }
 
   // 🔥 CALCULATE DISCOUNTED PER PIECE
   let discountedPerPiece = perPiece(final, quantity);
 
-  res.json({success:true}); // respond to Razorpay FIRST
+  // SAVE ORDER
+  await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      "Order ID":"AW"+Date.now(),
+      "Name":name,
+      "Email ID":email,
+      "Phone":phone,
+      "Pin Code":pin,
+      "Landmark":landmark,
+      "House No /Apartment No /Street No":house,
+      "Address":address,
+      "Product Title":productName,
+      "Product Image":image,
+      "Product URL":productURL,
+      "Size":selectedSize,
+      "Quantity":quantity,
 
-// save to sheet in background (do NOT await)
-fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-  method:"POST",
-  headers:{ "Content-Type":"application/json" },
-  body:JSON.stringify({
-    "Order ID":"AW"+Date.now(),
-    "Name":name,
-    "Email ID":email,
-    "Phone":phone,
-    "Pin Code":pin,
-    "Landmark":landmark,
-    "House No /Apartment No /Street No":house,
-    "Address":address,
-    "Product Title":productName,
-    "Product Image":image,
-    "Product URL":productURL,
-    "Size":selectedSize,
-    "Quantity":quantity,
-    "Price":discountedPerPiece,
-    "Base Price":price,
-    "Per Piece Price":discountedPerPiece,
-    "Total Price":final,
-    "Payment Status":"Paid",
-    "Payment Method":"Online"
-  })
-}).catch(()=>{});
+      // 🔥 FIXED VALUES
+      "Price":discountedPerPiece,
+      "Base Price":price,
+      "Per Piece Price":discountedPerPiece,
+      "Total Price":final,
+
+      "Payment Status":"Paid",
+      "Payment Method":"Online"
+    })
+  });
+
+  res.json({success:true});
 });
+
 // ---------------- COD ORDER (FULLY SECURE) ----------------
 app.post("/create-cod-order", async(req,res)=>{
 
@@ -190,36 +179,36 @@ app.post("/create-cod-order", async(req,res)=>{
     // 🔥 PER PIECE DISCOUNT
     let discountedPerPiece = perPiece(finalWithoutCOD, quantity);
 
-    res.json({success:true}); // respond instantly
+    await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body:JSON.stringify({
+        "Order ID":"AW"+Date.now(),
+        "Name":name,
+        "Email ID":email,
+        "Phone":phone,
+        "Pin Code":pin,
+        "Landmark":landmark,
+        "House No /Apartment No /Street No":house,
+        "Address":address,
+        "Product Title":productName,
+        "Product Image":image,
+        "Product URL":productURL,
+        "Size":selectedSize,
+        "Quantity":quantity,
 
-// background save
-fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-  method:"POST",
-  headers:{ "Content-Type":"application/json" },
-  body:JSON.stringify({
-    "Order ID":"AW"+Date.now(),
-    "Name":name,
-    "Email ID":email,
-    "Phone":phone,
-    "Pin Code":pin,
-    "Landmark":landmark,
-    "House No /Apartment No /Street No":house,
-    "Address":address,
-    "Product Title":productName,
-    "Product Image":image,
-    "Product URL":productURL,
-    "Size":selectedSize,
-    "Quantity":quantity,
-    "Price":discountedPerPiece,
-    "Base Price":price,
-    "Per Piece Price":discountedPerPiece,
-    "Total Price":final,
-    "Payment Status":"COD",
-    "Payment Method":"COD"
-  })
-}).catch(()=>{});
+        // 🔥 FIXED VALUES
+        "Price":discountedPerPiece,
+        "Base Price":price,
+        "Per Piece Price":discountedPerPiece,
+        "Total Price":final,
 
-return;
+        "Payment Status":"COD",
+        "Payment Method":"COD"
+      })
+    });
+
+    return res.json({success:true});
 
   }catch(e){
     console.log("COD ERROR", e);
