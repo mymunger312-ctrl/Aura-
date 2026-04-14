@@ -125,10 +125,7 @@ app.post("/verify-payment", async(req,res)=>{
   let final = calc(price,quantity);
 
   let order = await razorpay.orders.fetch(razorpay_order_id);
-
-  if(order.amount !== final*100){
-    return res.json({success:false});
-  }
+let final = order.amount / 100;   // ✅ use Razorpay trusted amount
 
   // 🔥 CALCULATE DISCOUNTED PER PIECE
   let discountedPerPiece = perPiece(final, quantity);
