@@ -157,7 +157,7 @@ fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb15
     "Payment Method":"Online"
   })
 }).catch(()=>{});
-
+});
 // ---------------- COD ORDER (FULLY SECURE) ----------------
 app.post("/create-cod-order", async(req,res)=>{
 
