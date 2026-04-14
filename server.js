@@ -129,38 +129,34 @@ let final = order.amount / 100;
   // 🔥 CALCULATE DISCOUNTED PER PIECE
   let discountedPerPiece = perPiece(final, quantity);
 
-  // SAVE ORDER
-  await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      "Order ID":"AW"+Date.now(),
-      "Name":name,
-      "Email ID":email,
-      "Phone":phone,
-      "Pin Code":pin,
-      "Landmark":landmark,
-      "House No /Apartment No /Street No":house,
-      "Address":address,
-      "Product Title":productName,
-      "Product Image":image,
-      "Product URL":productURL,
-      "Size":selectedSize,
-      "Quantity":quantity,
+  res.json({success:true}); // respond to Razorpay FIRST
 
-      // 🔥 FIXED VALUES
-      "Price":discountedPerPiece,
-      "Base Price":price,
-      "Per Piece Price":discountedPerPiece,
-      "Total Price":final,
-
-      "Payment Status":"Paid",
-      "Payment Method":"Online"
-    })
-  });
-
-  res.json({success:true});
-});
+// save to sheet in background (do NOT await)
+fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
+  method:"POST",
+  headers:{ "Content-Type":"application/json" },
+  body:JSON.stringify({
+    "Order ID":"AW"+Date.now(),
+    "Name":name,
+    "Email ID":email,
+    "Phone":phone,
+    "Pin Code":pin,
+    "Landmark":landmark,
+    "House No /Apartment No /Street No":house,
+    "Address":address,
+    "Product Title":productName,
+    "Product Image":image,
+    "Product URL":productURL,
+    "Size":selectedSize,
+    "Quantity":quantity,
+    "Price":discountedPerPiece,
+    "Base Price":price,
+    "Per Piece Price":discountedPerPiece,
+    "Total Price":final,
+    "Payment Status":"Paid",
+    "Payment Method":"Online"
+  })
+}).catch(()=>{});
 
 // ---------------- COD ORDER (FULLY SECURE) ----------------
 app.post("/create-cod-order", async(req,res)=>{
@@ -194,36 +190,36 @@ app.post("/create-cod-order", async(req,res)=>{
     // 🔥 PER PIECE DISCOUNT
     let discountedPerPiece = perPiece(finalWithoutCOD, quantity);
 
-    await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({
-        "Order ID":"AW"+Date.now(),
-        "Name":name,
-        "Email ID":email,
-        "Phone":phone,
-        "Pin Code":pin,
-        "Landmark":landmark,
-        "House No /Apartment No /Street No":house,
-        "Address":address,
-        "Product Title":productName,
-        "Product Image":image,
-        "Product URL":productURL,
-        "Size":selectedSize,
-        "Quantity":quantity,
+    res.json({success:true}); // respond instantly
 
-        // 🔥 FIXED VALUES
-        "Price":discountedPerPiece,
-        "Base Price":price,
-        "Per Piece Price":discountedPerPiece,
-        "Total Price":final,
+// background save
+fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
+  method:"POST",
+  headers:{ "Content-Type":"application/json" },
+  body:JSON.stringify({
+    "Order ID":"AW"+Date.now(),
+    "Name":name,
+    "Email ID":email,
+    "Phone":phone,
+    "Pin Code":pin,
+    "Landmark":landmark,
+    "House No /Apartment No /Street No":house,
+    "Address":address,
+    "Product Title":productName,
+    "Product Image":image,
+    "Product URL":productURL,
+    "Size":selectedSize,
+    "Quantity":quantity,
+    "Price":discountedPerPiece,
+    "Base Price":price,
+    "Per Piece Price":discountedPerPiece,
+    "Total Price":final,
+    "Payment Status":"COD",
+    "Payment Method":"COD"
+  })
+}).catch(()=>{});
 
-        "Payment Status":"COD",
-        "Payment Method":"COD"
-      })
-    });
-
-    return res.json({success:true});
+return;
 
   }catch(e){
     console.log("COD ERROR", e);
