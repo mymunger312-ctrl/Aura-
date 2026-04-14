@@ -121,11 +121,10 @@ app.post("/verify-payment", async(req,res)=>{
   }
 
   let product = await getProduct(productURL);
-  let price = getPrice(product,selectedSize);
-  let final = calc(price,quantity);
+let price = getPrice(product,selectedSize);
 
-  let order = await razorpay.orders.fetch(razorpay_order_id);
-let final = order.amount / 100;   // ✅ use Razorpay trusted amount
+let order = await razorpay.orders.fetch(razorpay_order_id);
+let final = order.amount / 100;
 
   // 🔥 CALCULATE DISCOUNTED PER PIECE
   let discountedPerPiece = perPiece(final, quantity);
