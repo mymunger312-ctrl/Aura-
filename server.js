@@ -18,7 +18,7 @@ const razorpay = new Razorpay({
 
 // ---------------- FETCH PRODUCT ----------------
 async function getProduct(url){
-  const sheet = await (await fetch("https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1")).json();
+  const sheet = await (await fetch(process.env.PRODUCT_API)).json();
 
   return sheet.find(p =>
     (p.Link || "").trim().split("?")[0] === url.trim().split("?")[0]
@@ -116,9 +116,13 @@ app.post("/verify-payment", async(req,res)=>{
 
   // SAVE ORDER
   await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
+  method:"POST",
+  headers:{ 
+    "Content-Type":"application/json",
+    "x-secret-key": process.env.SHEET_SECRET   // 🔥 ADD THIS
+  },
     body:JSON.stringify({
+"_secret": process.env.SHEET_SECRET,
       "Order ID":"AW"+Date.now(),
       "Name":name,
       "Email ID":email,
@@ -151,7 +155,9 @@ app.post("/verify-payment", async(req,res)=>{
 app.post("/create-cod-order", async(req,res)=>{
 
   try{
-
+if (!req.headers["x-client-key"] || req.headers["x-client-key"] !== process.env.CLIENT_KEY) {
+  return res.json({ success:false });
+}
     let {
       productURL,
       selectedSize,
@@ -180,9 +186,13 @@ app.post("/create-cod-order", async(req,res)=>{
     let discountedPerPiece = perPiece(finalWithoutCOD, quantity);
 
     await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+  method:"POST",
+  headers:{ 
+    "Content-Type":"application/json",
+    "x-secret-key": process.env.SHEET_SECRET   // 🔥 ADD THIS
+  },
       body:JSON.stringify({
+"_secret": process.env.SHEET_SECRET,
         "Order ID":"AW"+Date.now(),
         "Name":name,
         "Email ID":email,
