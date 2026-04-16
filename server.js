@@ -227,5 +227,33 @@ if (!req.headers["x-client-key"] || req.headers["x-client-key"] !== process.env.
 
 });
 
+app.post("/orders-action", async (req,res)=>{
+
+  const headers = {
+    "Content-Type":"application/json",
+    "x-client-key": process.env.CLIENT_KEY
+  };
+
+  let response = await fetch(process.env.PRODUCT_API, {
+    method:"POST",
+    headers,
+    body: JSON.stringify(req.body)
+  });
+
+  let data = await response.text();
+  res.send(data);
+});
+
+// GET ORDERS
+app.get("/get-orders", async (req,res)=>{
+
+  const email = req.query.email;
+
+  let response = await fetch(process.env.PRODUCT_API+"?email="+email);
+  let data = await response.json();
+
+  res.json(data);
+});
+
 app.get("/", (req,res)=>res.send("Server running"));
 app.listen(process.env.PORT||5000);
