@@ -543,11 +543,11 @@ app.post("/init-session", (req, res) => {
 
   const ip = req.headers["x-forwarded-for"]?.split(",")[0] || req.socket.remoteAddress;
 
-const finalSignature = crypto
-  .createHmac("sha256", process.env.SESSION_SECRET)
 const ua = req.headers["user-agent"] || "";
 
-.update(sessionId + expires + ip + ua)
+const finalSignature = crypto
+  .createHmac("sha256", process.env.SESSION_SECRET)
+  .update(sessionId + expires + ip + ua)
   .digest("hex");
 
 res.json({ sessionId, expires, signature: finalSignature });
