@@ -340,5 +340,32 @@ app.get("/products", async (req, res) => {
   res.json(data);
 });
 
-app.get("/", (req,res)=>res.send("Server running"));
+app.get("/", async (req, res) => {
+  try {
+    const email = req.query.email;
+
+    // Normal health check
+    if (!email) {
+      return res.send("Server running");
+    }
+
+    // Fetch user orders by email
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*")
+      .eq("email", email)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.log("FETCH ORDER ERROR:", error);
+      return res.status(500).json([]);
+    }
+
+    return res.json(data || []);
+
+  } catch (e) {
+    console.log("ROOT FETCH ERROR:", e);
+    return res.status(500).json([]);
+  }
+});
 app.listen(process.env.PORT||5000);
