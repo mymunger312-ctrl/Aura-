@@ -4,10 +4,49 @@ import crypto from "crypto";
 import fetch from "node-fetch";
 import cors from "cors";
 import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
+
 dotenv.config();
 
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+function verifyAdmin(req,res,next){
+  const token = req.headers.authorization;
+
+  if(token !== ADMIN_TOKEN){
+    return res.status(403).json({ error:"Unauthorized" });
+  }
+
+  next();
+}
+
 const app = express();
-app.use(cors());
+const allowedOrigins = [
+  "https://aurawardrobe.blogspot.com",
+  "https://aurawardrobe.in",
+  "https://www.aurawardrobe.in",
+  "https://vocal-fairy-493420.netlify.app"
+];
+
+app.use(cors({
+  origin: function(origin, callback){
+    if(!origin) return callback(null, true);
+    if(allowedOrigins.includes(origin)){
+      return callback(null, true);
+    }
+    return callback(new Error("CORS blocked: " + origin));
+  },
+  credentials: true,
+  methods: ["GET","POST"],
+  allowedHeaders: ["Content-Type"]
+}));
+
+app.set("trust proxy", 1);
 app.use(express.json());
 
 // RAZORPAY
@@ -18,11 +57,13 @@ const razorpay = new Razorpay({
 
 // ---------------- FETCH PRODUCT ----------------
 async function getProduct(url){
-  const sheet = await (await fetch("https://opensheet.elk.sh/1WI87R6lN_IJPy36_-FjRx4ZE8dATxtZHaV0rwIMSve4/Sheet1")).json();
+  const { data } = await supabase
+    .from("products")
+    .select("*")
+    .eq("link", url.split("?")[0])
+    .single();
 
-  return sheet.find(p =>
-    (p.Link || "").trim().split("?")[0] === url.trim().split("?")[0]
-  );
+  return data;
 }
 
 // ---------------- GET PRICE ----------------
@@ -102,47 +143,32 @@ app.post("/verify-payment", async(req,res)=>{
   }
 
   let product = await getProduct(productURL);
-  let price = getPrice(product,selectedSize);
-  let final = calc(price,quantity);
+let price = getPrice(product,selectedSize);
 
-  let order = await razorpay.orders.fetch(razorpay_order_id);
-
-  if(order.amount !== final*100){
-    return res.json({success:false});
-  }
+let order = await razorpay.orders.fetch(razorpay_order_id);
+let final = order.amount / 100;
 
   // 🔥 CALCULATE DISCOUNTED PER PIECE
   let discountedPerPiece = perPiece(final, quantity);
 
   // SAVE ORDER
-  await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify({
-      "Order ID":"AW"+Date.now(),
-      "Name":name,
-      "Email ID":email,
-      "Phone":phone,
-      "Pin Code":pin,
-      "Landmark":landmark,
-      "House No /Apartment No /Street No":house,
-      "Address":address,
-      "Product Title":productName,
-      "Product Image":image,
-      "Product URL":productURL,
-      "Size":selectedSize,
-      "Quantity":quantity,
-
-      // 🔥 FIXED VALUES
-      "Price":discountedPerPiece,
-      "Base Price":price,
-      "Per Piece Price":discountedPerPiece,
-      "Total Price":final,
-
-      "Payment Status":"Paid",
-      "Payment Method":"Online"
-    })
-  });
+  await supabase.from("orders").insert([{
+  order_id: "AW"+Date.now(),
+  name,
+  email,
+  phone,
+  address,
+  product_url: productURL,
+  product_name: productName,
+  image,
+  size: selectedSize,
+  quantity,
+  base_price: price,
+  per_piece_price: discountedPerPiece,
+  total_price: final,
+  payment_method: "Online",
+  payment_status: "Paid"
+}]);
 
   res.json({success:true});
 });
@@ -179,34 +205,23 @@ app.post("/create-cod-order", async(req,res)=>{
     // 🔥 PER PIECE DISCOUNT
     let discountedPerPiece = perPiece(finalWithoutCOD, quantity);
 
-    await fetch("https://script.google.com/macros/s/AKfycbx5ObJYnKZ0-CZMj8s65NMM5plyl4Zb151IH9kpz97YpigWh3mXSzCKtwS4KiFsFXkM/exec",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({
-        "Order ID":"AW"+Date.now(),
-        "Name":name,
-        "Email ID":email,
-        "Phone":phone,
-        "Pin Code":pin,
-        "Landmark":landmark,
-        "House No /Apartment No /Street No":house,
-        "Address":address,
-        "Product Title":productName,
-        "Product Image":image,
-        "Product URL":productURL,
-        "Size":selectedSize,
-        "Quantity":quantity,
-
-        // 🔥 FIXED VALUES
-        "Price":discountedPerPiece,
-        "Base Price":price,
-        "Per Piece Price":discountedPerPiece,
-        "Total Price":final,
-
-        "Payment Status":"COD",
-        "Payment Method":"COD"
-      })
-    });
+    await supabase.from("orders").insert([{
+  order_id: "AW"+Date.now(),
+  name,
+  email,
+  phone,
+  address,
+  product_url: productURL,
+  product_name: productName,
+  image,
+  size: selectedSize,
+  quantity,
+  base_price: price,
+  per_piece_price: discountedPerPiece,
+  total_price: final,
+  payment_method: "COD",
+  payment_status: "COD"
+}]);
 
     return res.json({success:true});
 
@@ -215,6 +230,80 @@ app.post("/create-cod-order", async(req,res)=>{
     return res.json({success:false});
   }
 
+});
+
+
+app.post("/review", async (req,res)=>{
+  let {orderId, rating, review, email, productURL, image} = req.body;
+
+  let { data:existing } = await supabase
+    .from("reviews")
+    .select("*")
+    .eq("order_id", orderId);
+
+  if(existing.length > 0){
+    return res.json({status:"duplicate"});
+  }
+
+  await supabase.from("reviews").insert([{
+    order_id:orderId,
+    product_url:productURL,
+    rating,
+    review,
+    email,
+    username:email.split("@")[0],
+    image_url:image
+  }]);
+
+  res.json({status:"success"});
+});
+
+app.post("/admin-add-review", verifyAdmin, async(req,res)=>{
+  let { name, rating, review, product_url } = req.body;
+
+  await supabase.from("reviews").insert([{
+    product_url,
+    rating,
+    review,
+    username: name,
+    email: "admin@aurawardrobe.in",
+    image_url: ""
+  }]);
+
+  res.json({success:true});
+});
+
+app.post("/admin-update-order", verifyAdmin, async(req,res)=>{
+  let {order_id, status, message} = req.body;
+
+  await supabase
+    .from("orders")
+    .update({
+      status,
+      custom_message: message
+    })
+    .eq("order_id", order_id);
+
+  res.json({success:true});
+});
+
+
+app.get("/admin-orders", verifyAdmin, async(req,res)=>{
+  let { data } = await supabase.from("orders").select("*").order("created_at",{ascending:false});
+  res.json(data);
+});
+
+app.get("/products", async (req, res) => {
+  const { data, error } = await supabase
+    .from("products")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json(data);
 });
 
 app.get("/", (req,res)=>res.send("Server running"));
