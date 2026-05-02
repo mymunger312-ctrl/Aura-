@@ -67,12 +67,30 @@ async function getProduct(url){
 }
 
 // ---------------- GET PRICE ----------------
-function getPrice(product,size){
-  let sizes = (product.Size || "").toLowerCase().split(",");
-  let prices = (product.Price || "").split(",");
+function getPrice(product, size){
+  if(
+    !product ||
+    !Array.isArray(product.sizes) ||
+    !Array.isArray(product.prices)
+  ){
+    return null;
+  }
 
-  let i = sizes.indexOf(size);
-  return i>=0 ? parseInt(prices[i]) : null;
+  let sizes = product.sizes.map(s =>
+    String(s).toLowerCase().trim()
+  );
+
+  let prices = product.prices.map(p =>
+    Number(p)
+  );
+
+  let index = sizes.indexOf(
+    String(size).toLowerCase().trim()
+  );
+
+  return index >= 0
+    ? prices[index]
+    : null;
 }
 
 // ---------------- DISCOUNT ----------------
@@ -258,19 +276,35 @@ app.post("/review", async (req,res)=>{
   res.json({status:"success"});
 });
 
-app.post("/admin-add-review", verifyAdmin, async(req,res)=>{
-  let { name, rating, review, product_url } = req.body;
+app.post("/admin-add-review", verifyAdmin, async (req, res) => {
+  try {
 
-  await supabase.from("reviews").insert([{
-    product_url,
-    rating,
-    review,
-    username: name,
-    email: "admin@aurawardrobe.in",
-    image_url: ""
-  }]);
+    let {
+      name,
+      rating,
+      review,
+      product_url,
+      image_url
+    } = req.body;
 
-  res.json({success:true});
+    await supabase.from("reviews").insert([{
+      product_url,
+      rating: Number(rating),
+      review,
+      username: name,
+      email: "admin@aurawardrobe.in",
+      image_url: image_url || ""
+    }]);
+
+    res.json({ success: true });
+
+  } catch (e) {
+    console.log("ADMIN REVIEW ERROR:", e);
+    res.json({
+      success: false,
+      error: e.message
+    });
+  }
 });
 
 app.post("/admin-update-order", verifyAdmin, async(req,res)=>{
