@@ -30,7 +30,7 @@ const allowedOrigins = [
   "https://aurawardrobe.blogspot.com",
   "https://aurawardrobe.in",
   "https://www.aurawardrobe.in",
-  "https://vocal-fairy-493420.netlify.app"
+  "https://grand-narwhal-9cd58a.netlify.app"
 ];
 
 app.use(cors({
@@ -250,6 +250,70 @@ app.post("/create-cod-order", async(req,res)=>{
 
 });
 
+// ---------------- CANCEL ORDER ----------------
+app.post("/", async (req,res)=>{
+
+  try{
+
+    const { action, orderId } = req.body;
+
+    // Only handle cancel action
+    if(action !== "cancel"){
+      return res.status(400).json({ status:"invalid_action" });
+    }
+
+    if(!orderId){
+      return res.status(400).json({ status:"missing_order_id" });
+    }
+
+    // 🔥 FETCH ORDER FIRST
+    const { data:order, error:fetchError } = await supabase
+      .from("orders")
+      .select("created_at, status")
+      .eq("order_id", orderId)
+      .single();
+
+    if(fetchError || !order){
+      return res.json({ status:"not_found" });
+    }
+
+    // ❌ Already cancelled
+    if(order.status === "Cancelled"){
+      return res.json({ status:"already_cancelled" });
+    }
+
+    // ⏱️ CHECK 8 HOUR WINDOW
+    let orderTime = new Date(order.created_at).getTime();
+    let now = Date.now();
+
+    let diff = now - orderTime;
+
+    if(diff > 8 * 60 * 60 * 1000){
+      return res.json({ status:"expired" });
+    }
+
+    // ✅ UPDATE STATUS IN SUPABASE
+    const { error:updateError } = await supabase
+      .from("orders")
+      .update({
+        status: "Cancelled",
+cancel_request: true
+      })
+      .eq("order_id", orderId);
+
+    if(updateError){
+      console.log("CANCEL ERROR:", updateError);
+      return res.json({ status:"error" });
+    }
+
+    return res.json({ status:"success" });
+
+  }catch(e){
+    console.log("CANCEL SERVER ERROR:", e);
+    return res.json({ status:"error" });
+  }
+
+});
 
 app.post("/review", async (req,res)=>{
   let {orderId, rating, review, email, productURL, image} = req.body;
