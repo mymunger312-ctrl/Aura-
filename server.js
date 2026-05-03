@@ -185,7 +185,8 @@ let final = order.amount / 100;
   per_piece_price: discountedPerPiece,
   total_price: final,
   payment_method: "Online",
-  payment_status: "Paid"
+  payment_status: "Paid",
+created_at: new Date().toISOString()
 }]);
 
   res.json({success:true});
@@ -238,7 +239,8 @@ app.post("/create-cod-order", async(req,res)=>{
   per_piece_price: discountedPerPiece,
   total_price: final,
   payment_method: "COD",
-  payment_status: "COD"
+  payment_status: "COD",
+created_at: new Date().toISOString()
 }]);
 
     return res.json({success:true});
@@ -316,28 +318,54 @@ cancel_request: true
 });
 
 app.post("/review", async (req,res)=>{
-  let {orderId, rating, review, email, productURL, image} = req.body;
+  try{
 
-  let { data:existing } = await supabase
-    .from("reviews")
-    .select("*")
-    .eq("order_id", orderId);
+    let {orderId, rating, review, email, productURL, image} = req.body;
 
-  if(existing.length > 0){
-    return res.json({status:"duplicate"});
+    // 🔒 VALIDATION (important for stability)
+    if(!orderId || !rating || !email || !productURL){
+      return res.json({status:"error", message:"Missing fields"});
+    }
+
+    // 🔁 DUPLICATE CHECK
+    let { data:existing, error:dupError } = await supabase
+      .from("reviews")
+      .select("id")
+      .eq("order_id", orderId);
+
+    if(dupError){
+      console.log("DUP CHECK ERROR:", dupError);
+      return res.json({status:"error"});
+    }
+
+    if(existing && existing.length > 0){
+      return res.json({status:"duplicate"});
+    }
+
+    // ✅ INSERT REVIEW
+    let { error:insertError } = await supabase
+      .from("reviews")
+      .insert([{
+        order_id: orderId,
+        product_url: productURL,
+        rating: Number(rating),
+        review: review || "",
+        email,
+        username: email.split("@")[0],
+        image_url: image || ""
+      }]);
+
+    if(insertError){
+      console.log("REVIEW INSERT ERROR:", insertError);
+      return res.json({status:"error"});
+    }
+
+    return res.json({status:"success"});
+
+  }catch(e){
+    console.log("REVIEW SERVER ERROR:", e);
+    return res.json({status:"error"});
   }
-
-  await supabase.from("reviews").insert([{
-    order_id:orderId,
-    product_url:productURL,
-    rating,
-    review,
-    email,
-    username:email.split("@")[0],
-    image_url:image
-  }]);
-
-  res.json({status:"success"});
 });
 
 app.post("/admin-add-review", verifyAdmin, async (req, res) => {
