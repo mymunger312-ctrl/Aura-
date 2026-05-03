@@ -340,6 +340,25 @@ app.post("/review", async (req,res)=>{
   res.json({status:"success"});
 });
 
+// ---------------- GET REVIEWS ----------------
+app.get("/reviews", async (req,res)=>{
+  try{
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("*")
+      .order("created_at",{ascending:false});
+
+    if(error){
+      return res.status(500).json([]);
+    }
+
+    res.json(data || []);
+  }catch(e){
+    console.log("REVIEW FETCH ERROR:", e);
+    res.status(500).json([]);
+  }
+});
+
 app.post("/admin-add-review", verifyAdmin, async (req, res) => {
   try {
 
@@ -370,6 +389,7 @@ app.post("/admin-add-review", verifyAdmin, async (req, res) => {
     });
   }
 });
+
 
 app.post("/admin-update-order", verifyAdmin, async(req,res)=>{
   let {order_id, status, message} = req.body;
