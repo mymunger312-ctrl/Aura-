@@ -47,7 +47,8 @@ app.use(cors({
 }));
 
 app.set("trust proxy", 1);
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
 // RAZORPAY
 const razorpay = new Razorpay({
@@ -186,7 +187,7 @@ let final = order.amount / 100;
   total_price: final,
   payment_method: "Online",
   payment_status: "Paid",
-created_at: new Date().toISOString()
+created_at timestamp default now()
 }]);
 
   res.json({success:true});
@@ -240,7 +241,7 @@ app.post("/create-cod-order", async(req,res)=>{
   total_price: final,
   payment_method: "COD",
   payment_status: "COD",
-created_at: new Date().toISOString()
+created_at timestamp default now()
 }]);
 
     return res.json({success:true});
