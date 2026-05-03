@@ -414,7 +414,7 @@ app.post("/admin-update-order", verifyAdmin, async(req,res)=>{
 
 
 app.get("/admin-orders", verifyAdmin, async(req,res)=>{
-  let { data } = await supabase.from("orders").select("*").order("created_at",{ascending:false});
+  let { data } = await supabase.from("orders").select("*").order("created_at",{ascending:true});
   res.json(data);
 });
 
@@ -425,7 +425,7 @@ app.get("/reviews", async (req,res)=>{
     const { data, error } = await supabase
       .from("reviews")
       .select("*")
-      .order("created_at",{ascending:false});
+      .order("created_at",{ascending:true});
 
     if(error){
       console.log("REVIEW FETCH ERROR:", error);
@@ -444,7 +444,7 @@ app.get("/products", async (req, res) => {
   const { data, error } = await supabase
     .from("products")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: true });
 
   if (error) {
     return res.status(500).json({ error: error.message });
@@ -467,7 +467,7 @@ app.get("/", async (req, res) => {
       .from("orders")
       .select("*")
       .eq("email", email)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (error) {
       console.log("FETCH ORDER ERROR:", error);
