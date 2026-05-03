@@ -123,6 +123,13 @@ async function getEmbedding(text){
   });
 
   const json = await res.json();
+
+  // ✅ SAFETY: never crash server
+  if(!json.data || !json.data[0]){
+    console.log("OPENAI ERROR RESPONSE:", json);
+    throw new Error("Embedding failed");
+  }
+
   return json.data[0].embedding;
 }
 
@@ -485,21 +492,34 @@ app.get("/products", async (req, res) => {
 
 app.get("/generate-embeddings", async(req,res)=>{
 
-  let { data:products } = await supabase.from("products").select("*");
+  try{
 
-  for(let p of products){
+    let { data:products } = await supabase.from("products").select("*");
 
-    let text = `${p.name} ${p.category || ""} ${p.tags || ""}`;
+    for(let p of products){
 
-    let embedding = await getEmbedding(text);
+      let text = `${p.name} ${p.category || ""} ${p.tags || ""}`;
 
-    await supabase
-      .from("products")
-      .update({ embedding })
-      .eq("id", p.id);
+      try{
+        let embedding = await getEmbedding(text);
+
+        await supabase
+          .from("products")
+          .update({ embedding })
+          .eq("id", p.id);
+
+      }catch(e){
+        console.log("EMBED FAIL FOR:", p.name);
+      }
+    }
+
+    res.send("Embeddings done safely");
+
+  }catch(e){
+    console.log("GEN EMBEDDING ERROR:", e);
+    res.status(500).send("Failed");
   }
 
-  res.send("Embeddings done");
 });
 
 app.get("/ai-search", async(req,res)=>{
