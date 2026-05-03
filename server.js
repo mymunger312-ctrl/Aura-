@@ -8,6 +8,8 @@ import { createClient } from "@supabase/supabase-js";
 
 dotenv.config();
 
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 
 const supabase = createClient(
@@ -105,6 +107,23 @@ function calc(price,qty){
 // 🔥 NEW: PER PIECE DISCOUNT CALCULATOR
 function perPiece(final, qty){
   return Math.round(final / qty);
+}
+
+async function getEmbedding(text){
+  const res = await fetch("https://api.openai.com/v1/embeddings",{
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "Authorization":`Bearer ${OPENAI_API_KEY}`
+    },
+    body: JSON.stringify({
+      model:"text-embedding-3-small",
+      input:text
+    })
+  });
+
+  const json = await res.json();
+  return json.data[0].embedding;
 }
 
 // ---------------- CREATE ORDER (ONLINE) ----------------
@@ -451,6 +470,25 @@ app.get("/products", async (req, res) => {
   }
 
   res.json(data);
+});
+
+app.get("/generate-embeddings", async(req,res)=>{
+
+  let { data:products } = await supabase.from("products").select("*");
+
+  for(let p of products){
+
+    let text = `${p.name} ${p.category || ""} ${p.tags || ""}`;
+
+    let embedding = await getEmbedding(text);
+
+    await supabase
+      .from("products")
+      .update({ embedding })
+      .eq("id", p.id);
+  }
+
+  res.send("Embeddings done");
 });
 
 app.get("/", async (req, res) => {
