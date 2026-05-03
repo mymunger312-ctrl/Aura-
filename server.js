@@ -459,6 +459,17 @@ app.get("/reviews", async (req,res)=>{
   }
 });
 
+app.post("/track-click", async(req,res)=>{
+  let { query, productId } = req.body;
+
+  await supabase.from("search_logs").insert([{
+    query,
+    product_id: productId
+  }]);
+
+  res.json({success:true});
+});
+
 app.get("/products", async (req, res) => {
   const { data, error } = await supabase
     .from("products")
@@ -489,6 +500,33 @@ app.get("/generate-embeddings", async(req,res)=>{
   }
 
   res.send("Embeddings done");
+});
+
+app.get("/ai-search", async(req,res)=>{
+
+  let q = req.query.q;
+  if(!q) return res.json([]);
+
+  try{
+
+    let embedding = await getEmbedding(q);
+
+    const { data, error } = await supabase.rpc("match_products", {
+      query_embedding: embedding,
+      match_count: 20
+    });
+
+    if(error){
+      console.log(error);
+      return res.json([]);
+    }
+
+    res.json(data);
+
+  }catch(e){
+    console.log("AI SEARCH ERROR:", e);
+    res.json([]);
+  }
 });
 
 app.get("/", async (req, res) => {
