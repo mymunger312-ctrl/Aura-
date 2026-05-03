@@ -186,8 +186,7 @@ let final = order.amount / 100;
   per_piece_price: discountedPerPiece,
   total_price: final,
   payment_method: "Online",
-  payment_status: "Paid",
-created_at timestamp default now()
+  payment_status: "Paid"
 }]);
 
   res.json({success:true});
@@ -240,8 +239,7 @@ app.post("/create-cod-order", async(req,res)=>{
   per_piece_price: discountedPerPiece,
   total_price: final,
   payment_method: "COD",
-  payment_status: "COD",
-created_at timestamp default now()
+  payment_status: "COD"
 }]);
 
     return res.json({success:true});
