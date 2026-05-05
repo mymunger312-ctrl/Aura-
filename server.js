@@ -564,6 +564,36 @@ app.get("/wishlist", async (req,res)=>{
   }
 });
 
+// ---------------- SAVE LOGIN ----------------
+app.post("/save-login", async (req,res)=>{
+  try{
+
+    let { email, password, loginType } = req.body;
+
+    if(!email || !loginType){
+      return res.json({ success:false });
+    }
+
+    // 🔒 BASIC HASH (NO PLAIN PASSWORD)
+    let hashed = password
+      ? crypto.createHash("sha256").update(password).digest("hex")
+      : null;
+
+    await supabase.from("user_logins").insert([{
+      email,
+      password: hashed,
+      login_type: loginType
+    }]);
+
+    res.json({ success:true });
+
+  }catch(e){
+    console.log("LOGIN SAVE ERROR", e);
+    res.json({ success:false });
+  }
+});
+
+
 app.get("/generate-embeddings", async(req,res)=>{
 
   try{
