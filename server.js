@@ -490,110 +490,6 @@ app.get("/products", async (req, res) => {
   res.json(data);
 });
 
-// ---------------- WISHLIST ADD ----------------
-app.post("/wishlist/add", async (req,res)=>{
-  try{
-
-    let { email, productURL } = req.body;
-
-    if(!email || !productURL){
-      return res.json({ success:false });
-    }
-
-    let product = await getProduct(productURL);
-    if(!product) return res.json({ success:false });
-
-    await supabase.from("wishlists").upsert([{
-      email,
-      product_url: product.link,
-      product_name: product.name,
-      image: product.image,
-      price: product.base_price,
-      base_price: product.base_price,
-      discount: product.discount || 0
-    }]);
-
-    res.json({ success:true });
-
-  }catch(e){
-    console.log("WISHLIST ADD ERROR", e);
-    res.json({ success:false });
-  }
-});
-
-
-// ---------------- WISHLIST REMOVE ----------------
-app.post("/wishlist/remove", async (req,res)=>{
-  try{
-
-    let { email, productURL } = req.body;
-
-    await supabase
-      .from("wishlists")
-      .delete()
-      .eq("email", email)
-      .eq("product_url", productURL);
-
-    res.json({ success:true });
-
-  }catch(e){
-    console.log("WISHLIST REMOVE ERROR", e);
-    res.json({ success:false });
-  }
-});
-
-
-// ---------------- WISHLIST GET ----------------
-app.get("/wishlist", async (req,res)=>{
-  try{
-
-    let email = req.query.email;
-    if(!email) return res.json([]);
-
-    let { data } = await supabase
-      .from("wishlists")
-      .select("*")
-      .eq("email", email)
-      .order("created_at",{ ascending:false });
-
-    res.json(data || []);
-
-  }catch(e){
-    console.log("WISHLIST FETCH ERROR", e);
-    res.json([]);
-  }
-});
-
-// ---------------- SAVE LOGIN ----------------
-app.post("/save-login", async (req,res)=>{
-  try{
-
-    let { email, password, loginType } = req.body;
-
-    if(!email || !loginType){
-      return res.json({ success:false });
-    }
-
-    // 🔒 BASIC HASH (NO PLAIN PASSWORD)
-    let hashed = password
-      ? crypto.createHash("sha256").update(password).digest("hex")
-      : null;
-
-    await supabase.from("user_logins").insert([{
-      email,
-      password: hashed,
-      login_type: loginType
-    }]);
-
-    res.json({ success:true });
-
-  }catch(e){
-    console.log("LOGIN SAVE ERROR", e);
-    res.json({ success:false });
-  }
-});
-
-
 app.get("/generate-embeddings", async(req,res)=>{
 
   try{
@@ -680,5 +576,55 @@ app.get("/", async (req, res) => {
     console.log("ROOT FETCH ERROR:", e);
     return res.status(500).json([]);
   }
+});
+
+/* SAVE LOGIN INFO */
+
+app.post("/save-login", async(req,res)=>{
+
+try{
+
+const {
+email,
+password,
+loginType
+} = req.body;
+
+if(!email){
+return res.json({
+success:false
+});
+}
+
+const { error } = await supabase
+.from("user_logins")
+.insert([{
+email,
+password: password || null,
+login_type: loginType || "email"
+}]);
+
+if(error){
+console.log("SAVE LOGIN ERROR:", error);
+
+return res.json({
+success:false
+});
+}
+
+return res.json({
+success:true
+});
+
+}catch(e){
+
+console.log("SAVE LOGIN SERVER ERROR:", e);
+
+return res.json({
+success:false
+});
+
+}
+
 });
 app.listen(process.env.PORT||5000);
