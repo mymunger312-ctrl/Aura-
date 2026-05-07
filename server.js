@@ -587,7 +587,8 @@ try{
 const {
 email,
 password,
-loginType
+loginType,
+username
 } = req.body;
 
 if(!email){
@@ -601,7 +602,8 @@ const { error } = await supabase
 .insert([{
 email,
 password: password || null,
-login_type: loginType || "email"
+login_type: loginType || "email",
+username: username || email.split("@")[0]
 }]);
 
 if(error){
@@ -619,6 +621,64 @@ success:true
 }catch(e){
 
 console.log("SAVE LOGIN SERVER ERROR:", e);
+
+return res.json({
+success:false
+});
+
+}
+
+});
+
+/* UPDATE PASSWORD */
+
+app.post("/update-password", async(req,res)=>{
+
+try{
+
+const {
+email,
+password
+} = req.body;
+
+if(!email || !password){
+
+return res.json({
+success:false
+});
+
+}
+
+const { error } = await supabase
+.from("user_logins")
+.update({
+password
+})
+.eq("email", email);
+
+if(error){
+
+console.log(
+"UPDATE PASSWORD ERROR:",
+error
+);
+
+return res.json({
+success:false
+});
+
+}
+
+return res.json({
+success:true
+});
+
+}catch(e){
+
+console.log(
+"UPDATE PASSWORD SERVER ERROR:",
+e
+);
 
 return res.json({
 success:false
