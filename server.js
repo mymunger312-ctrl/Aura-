@@ -17,6 +17,33 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// ---------------- GOOGLE SHEET SYNC ----------------
+
+async function syncOrderToSheet(orderData){
+
+  try{
+
+    await fetch(process.env.GOOGLE_SHEET_WEBHOOK,{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json"
+      },
+      body: JSON.stringify({
+        order_id: orderData.order_id,
+        email: orderData.email,
+        product_url: orderData.product_url,
+        status: orderData.status || "Processing"
+      })
+    });
+
+  }catch(e){
+
+    console.log("GOOGLE SHEET SYNC ERROR:", e);
+
+  }
+
+}
+
 function verifyAdmin(req,res,next){
   const token = req.headers.authorization;
 
@@ -197,7 +224,7 @@ let final = order.amount / 100;
   let discountedPerPiece = perPiece(final, quantity);
 
   // SAVE ORDER
-  await supabase.from("orders").insert([{
+  const newOrder = {
   order_id: "AW"+Date.now(),
   name,
   email,
@@ -212,8 +239,15 @@ let final = order.amount / 100;
   per_piece_price: discountedPerPiece,
   total_price: final,
   payment_method: "Online",
-  payment_status: "Paid"
-}]);
+  payment_status: "Paid",
+  status: "Processing"
+};
+
+await supabase
+.from("orders")
+.insert([newOrder]);
+
+await syncOrderToSheet(newOrder);
 
   res.json({success:true});
 });
@@ -250,7 +284,7 @@ app.post("/create-cod-order", async(req,res)=>{
     // 🔥 PER PIECE DISCOUNT
     let discountedPerPiece = perPiece(finalWithoutCOD, quantity);
 
-    await supabase.from("orders").insert([{
+    const newOrder = {
   order_id: "AW"+Date.now(),
   name,
   email,
@@ -265,8 +299,15 @@ app.post("/create-cod-order", async(req,res)=>{
   per_piece_price: discountedPerPiece,
   total_price: final,
   payment_method: "COD",
-  payment_status: "COD"
-}]);
+  payment_status: "COD",
+  status: "Processing"
+};
+
+await supabase
+.from("orders")
+.insert([newOrder]);
+
+await syncOrderToSheet(newOrder);
 
     return res.json({success:true});
 
